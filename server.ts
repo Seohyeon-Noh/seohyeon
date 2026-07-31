@@ -89,11 +89,12 @@ app.post("/api/analyze-pdf", upload.single("file"), async (req: Request, res: Re
 - 학생 이름: ${studentName}
 - 생년월일: ${birthDate}
 
-[분석 지침]
+[분석 및 작성 지침]
 1. PDF 결과지에 나와있는 주요 검사 척도, 점수, 수준, 심리 상태를 정확하게 파악할 것.
-2. 학생의 학년/연령 및 소속 정보를 반영하여 교사가 실무에서 바로 활용할 수 있는 실질적인 지침을 제공할 것.
-3. 한국어로 전문적이면서도 따뜻하고 명확하게 작성할 것.
-4. 반드시 주어진 JSON 구조에 맞춰 응답할 것.
+2. [프로파일 분석 지침]: 학생 본인과 학부모도 쉽게 이해할 수 있도록 '일상생활에서의 실제 예시'(예: 숙제/시험을 치를 때, 친구와 놀거나 대화할 때, 집이나 학교 생활에서의 모습 등)를 구체적으로 포함하여 친근하고 생생하게 설명할 것.
+3. [맞춤형 추천 지침]: '맞춤형 학습 방법', '자기관리 & 습관 지도', '교사 상담 가이드'의 각 항목 문장 처음에 반드시 핵심 개념을 담은 #해시태그 (예: #소규모_분할학습, #시각자료_활용, #10분_정돈루틴, #3초_숨고르기, #개별조용한_피드백 등)를 포함하고 핵심 키워드를 강조할 것.
+4. 한국어로 전문적이면서도 따뜻하고 명확하게 작성할 것.
+5. 반드시 주어진 JSON 구조에 맞춰 응답할 것.
 `;
 
     const imageOrPdfPart = {
@@ -141,10 +142,10 @@ app.post("/api/analyze-pdf", upload.single("file"), async (req: Request, res: Re
             profile: {
               type: Type.OBJECT,
               properties: {
-                cognitiveTrait: { type: Type.STRING, description: "1. 인지 및 학습적 특성 분석" },
-                emotionalTrait: { type: Type.STRING, description: "2. 정서 및 심리적 특성 분석" },
-                socialTrait: { type: Type.STRING, description: "3. 대인관계 및 사회성 특성 분석" },
-                overallProfile: { type: Type.STRING, description: "4. 종합 검사 프로파일 요약" },
+                cognitiveTrait: { type: Type.STRING, description: "1. 인지 및 학습적 특성 분석 (학생이 쉽게 이해할 수 있도록 일상 생활 상황/예시 포함)" },
+                emotionalTrait: { type: Type.STRING, description: "2. 정서 및 심리적 특성 분석 (학생이 쉽게 이해할 수 있도록 일상 생활 상황/예시 포함)" },
+                socialTrait: { type: Type.STRING, description: "3. 대인관계 및 사회성 특성 분석 (학생이 쉽게 이해할 수 있도록 일상 생활 상황/예시 포함)" },
+                overallProfile: { type: Type.STRING, description: "4. 종합 검사 프로파일 요약 (학생 맞춤 일상 예시 포함 종합 총평)" },
               },
               required: ["cognitiveTrait", "emotionalTrait", "socialTrait", "overallProfile"],
             },
@@ -154,12 +155,12 @@ app.post("/api/analyze-pdf", upload.single("file"), async (req: Request, res: Re
                 strengths: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: "학생의 대표적인 강점 (3~5가지)",
+                  description: "학생의 대표적인 강점 (3~5가지, 일상 예시 포함)",
                 },
                 weaknesses: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: "학생의 취약점 및 보완이 필요한 유의점 (3~5가지)",
+                  description: "학생의 취약점 및 보완이 필요한 유의점 (3~5가지, 일상 예시 포함)",
                 },
               },
               required: ["strengths", "weaknesses"],
@@ -170,17 +171,17 @@ app.post("/api/analyze-pdf", upload.single("file"), async (req: Request, res: Re
                 learningMethods: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: "성향에 맞는 구체적 학습방법 추천 (3~4가지)",
+                  description: "성향에 맞는 구체적 학습방법 추천 (각 항목은 #해시태그 로 시작하며 주요 개념을 강조)",
                 },
                 selfManagement: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: "자기관리 및 규칙적 생활 습관 코칭 추천 (3~4가지)",
+                  description: "자기관리 및 규칙적 생활 습관 코칭 추천 (각 항목은 #해시태그 로 시작하며 주요 개념을 강조)",
                 },
                 teacherAdvice: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: "담임/교사를 위한 개별 지도 및 상담 가이드라인 (3~4가지)",
+                  description: "담임/교사를 위한 개별 지도 및 상담 가이드라인 (각 항목은 #해시태그 로 시작하며 주요 개념을 강조)",
                 },
               },
               required: ["learningMethods", "selfManagement", "teacherAdvice"],

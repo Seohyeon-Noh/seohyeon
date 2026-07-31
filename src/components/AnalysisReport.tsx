@@ -82,6 +82,53 @@ export const AnalysisReport: React.FC<AnalysisReportProps> = ({
     return "bg-blue-100 text-blue-800 border-blue-200";
   };
 
+// Helper function to format recommendation text containing #hashtags and **bold** syntax
+const renderFormattedText = (text: string) => {
+  if (!text) return null;
+
+  // Split hashtags first (e.g., #소규모_분할학습 or #해시태그)
+  // Pattern matches #word_or_korean at start or in middle
+  const hashtagRegex = /(#[가-힣a-zA-Z0-9_]+)/g;
+  const parts = text.split(hashtagRegex);
+
+  return (
+    <span className="leading-relaxed">
+      {parts.map((part, index) => {
+        if (part.startsWith("#")) {
+          return (
+            <span
+              key={index}
+              className="inline-flex items-center px-2 py-0.5 mr-1.5 mb-1 text-xs font-black rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200/80 shadow-2xs font-mono"
+            >
+              {part}
+            </span>
+          );
+        }
+
+        // Process markdown bold **text**
+        const boldRegex = /(\*\*[^*]+\*\*)/g;
+        const subParts = part.split(boldRegex);
+
+        return (
+          <React.Fragment key={index}>
+            {subParts.map((sub, subIndex) => {
+              if (sub.startsWith("**") && sub.endsWith("**")) {
+                const cleanText = sub.slice(2, -2);
+                return (
+                  <strong key={subIndex} className="font-extrabold text-slate-900 underline decoration-indigo-300 underline-offset-2">
+                    {cleanText}
+                  </strong>
+                );
+              }
+              return sub;
+            })}
+          </React.Fragment>
+        );
+      })}
+    </span>
+  );
+};
+
   return (
     <div className="space-y-6 print:space-y-4 print:p-0">
       {/* Top Action Bar & Sync Status */}
@@ -246,53 +293,60 @@ export const AnalysisReport: React.FC<AnalysisReportProps> = ({
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-900">종합 검사 프로파일</h3>
-            <p className="text-xs text-slate-500">학생의 인지, 정서, 대인관계 측면의 입체적 심리 분석 결과입니다.</p>
+            <p className="text-xs text-slate-500">학생이 쉽게 이해할 수 있도록 일상생활 예시와 함께 정리된 입체적 심리 분석 결과입니다.</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* 인지 및 학습적 특성 */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 hover:border-indigo-200 transition-all">
-            <div className="flex items-center space-x-2 text-indigo-700 font-bold text-sm mb-3">
-              <BookOpen className="w-4 h-4" />
-              <span>인지 및 학습적 특성</span>
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 hover:border-indigo-200 transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center space-x-2 text-indigo-700 font-bold text-sm mb-3">
+                <BookOpen className="w-4 h-4" />
+                <span>인지 및 학습적 특성</span>
+              </div>
+              <div className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                {renderFormattedText(analysis.profile.cognitiveTrait)}
+              </div>
             </div>
-            <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-              {analysis.profile.cognitiveTrait}
-            </p>
           </div>
 
           {/* 정서 및 심리적 특성 */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 hover:border-indigo-200 transition-all">
-            <div className="flex items-center space-x-2 text-indigo-700 font-bold text-sm mb-3">
-              <Brain className="w-4 h-4" />
-              <span>정서 및 심리적 특성</span>
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 hover:border-indigo-200 transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center space-x-2 text-indigo-700 font-bold text-sm mb-3">
+                <Brain className="w-4 h-4" />
+                <span>정서 및 심리적 특성</span>
+              </div>
+              <div className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                {renderFormattedText(analysis.profile.emotionalTrait)}
+              </div>
             </div>
-            <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-              {analysis.profile.emotionalTrait}
-            </p>
           </div>
 
           {/* 대인관계 및 사회성 특성 */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 hover:border-indigo-200 transition-all">
-            <div className="flex items-center space-x-2 text-indigo-700 font-bold text-sm mb-3">
-              <UserCheck className="w-4 h-4" />
-              <span>대인관계 및 사회성</span>
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 hover:border-indigo-200 transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center space-x-2 text-indigo-700 font-bold text-sm mb-3">
+                <UserCheck className="w-4 h-4" />
+                <span>대인관계 및 사회성</span>
+              </div>
+              <div className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                {renderFormattedText(analysis.profile.socialTrait)}
+              </div>
             </div>
-            <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-              {analysis.profile.socialTrait}
-            </p>
           </div>
         </div>
 
         {/* 종합 프로파일 총평 */}
         <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-5">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-900 mb-2">
-            종합 프로파일 요약 총평
+          <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-900 mb-2 flex items-center space-x-1.5">
+            <Sparkles className="w-4 h-4 text-indigo-600" />
+            <span>학생 맞춤 일상 예시 종합 총평</span>
           </h4>
-          <p className="text-xs sm:text-sm text-slate-800 leading-relaxed font-medium">
-            {analysis.profile.overallProfile}
-          </p>
+          <div className="text-xs sm:text-sm text-slate-800 leading-relaxed font-medium">
+            {renderFormattedText(analysis.profile.overallProfile)}
+          </div>
         </div>
       </div>
 
@@ -304,7 +358,7 @@ export const AnalysisReport: React.FC<AnalysisReportProps> = ({
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-900">학생의 강점 및 약점 (취약점)</h3>
-            <p className="text-xs text-slate-500">학생이 보유한 주요 핵심 강점과 지도 시 주의가 필요한 유의사항입니다.</p>
+            <p className="text-xs text-slate-500">학생이 보유한 주요 핵심 강점과 일상지도 시 주의가 필요한 유의사항입니다.</p>
           </div>
         </div>
 
@@ -321,7 +375,7 @@ export const AnalysisReport: React.FC<AnalysisReportProps> = ({
                   <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
                     ✓
                   </span>
-                  <span className="leading-relaxed">{str}</span>
+                  <span className="leading-relaxed">{renderFormattedText(str)}</span>
                 </li>
               ))}
             </ul>
@@ -339,7 +393,7 @@ export const AnalysisReport: React.FC<AnalysisReportProps> = ({
                   <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
                     !
                   </span>
-                  <span className="leading-relaxed">{wk}</span>
+                  <span className="leading-relaxed">{renderFormattedText(wk)}</span>
                 </li>
               ))}
             </ul>
@@ -355,7 +409,7 @@ export const AnalysisReport: React.FC<AnalysisReportProps> = ({
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-900">맞춤형 학습방법 및 생활지도 추천</h3>
-            <p className="text-xs text-slate-500">학생의 성향에 최적화된 학습 코칭과 교사를 위한 개별 상담 가이드입니다.</p>
+            <p className="text-xs text-slate-500">주요 개념을 해시태그와 굵은 글씨로 강조한 학생 맞춤 코칭 및 교사 상담 가이드입니다.</p>
           </div>
         </div>
 
@@ -366,11 +420,11 @@ export const AnalysisReport: React.FC<AnalysisReportProps> = ({
               <BookOpen className="w-4 h-4 text-indigo-600" />
               <span>맞춤형 학습 방법</span>
             </div>
-            <ul className="space-y-3">
+            <ul className="space-y-3.5">
               {analysis.recommendations.learningMethods.map((item, idx) => (
-                <li key={idx} className="flex items-start space-x-2 text-xs sm:text-sm text-slate-700">
+                <li key={idx} className="flex items-start space-x-2 text-xs sm:text-sm text-slate-800">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 flex-shrink-0 mt-2" />
-                  <span className="leading-relaxed">{item}</span>
+                  <div className="leading-relaxed">{renderFormattedText(item)}</div>
                 </li>
               ))}
             </ul>
@@ -382,11 +436,11 @@ export const AnalysisReport: React.FC<AnalysisReportProps> = ({
               <Lightbulb className="w-4 h-4 text-sky-600" />
               <span>자기관리 & 습관 지도</span>
             </div>
-            <ul className="space-y-3">
+            <ul className="space-y-3.5">
               {analysis.recommendations.selfManagement.map((item, idx) => (
-                <li key={idx} className="flex items-start space-x-2 text-xs sm:text-sm text-slate-700">
+                <li key={idx} className="flex items-start space-x-2 text-xs sm:text-sm text-slate-800">
                   <span className="w-1.5 h-1.5 rounded-full bg-sky-600 flex-shrink-0 mt-2" />
-                  <span className="leading-relaxed">{item}</span>
+                  <div className="leading-relaxed">{renderFormattedText(item)}</div>
                 </li>
               ))}
             </ul>
@@ -398,11 +452,11 @@ export const AnalysisReport: React.FC<AnalysisReportProps> = ({
               <UserCheck className="w-4 h-4 text-purple-600" />
               <span>담임/교사 상담 가이드</span>
             </div>
-            <ul className="space-y-3">
+            <ul className="space-y-3.5">
               {analysis.recommendations.teacherAdvice.map((item, idx) => (
-                <li key={idx} className="flex items-start space-x-2 text-xs sm:text-sm text-slate-700">
+                <li key={idx} className="flex items-start space-x-2 text-xs sm:text-sm text-slate-800">
                   <span className="w-1.5 h-1.5 rounded-full bg-purple-600 flex-shrink-0 mt-2" />
-                  <span className="leading-relaxed">{item}</span>
+                  <div className="leading-relaxed">{renderFormattedText(item)}</div>
                 </li>
               ))}
             </ul>
