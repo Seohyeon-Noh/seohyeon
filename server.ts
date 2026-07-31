@@ -1,0 +1,266 @@
+import express, { Request, Response } from "express";
+import path from "path";
+import multer from "multer";
+import { GoogleGenAI, Type } from "@google/genai";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const app = express();
+const PORT = 3000;
+
+// Configure body parsing
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+
+// Configure Multer for file upload in memory
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 20 * 1024 * 1024, // 20MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === "application/pdf" || file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("PDF 또는 이미지 파일만 업로드 가능합니다."));
+    }
+  },
+});
+
+// Lazy Gemini AI initialization helper
+function getGeminiClient() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY 환경변수가 설정되어 있지 않습니다. AI Studio 비밀키 panel에서 키를 설정해 주세요.");
+  }
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
+}
+
+// Health Check API
+app.get("/api/health", (req: Request, res: Response) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Gemini PDF Analysis API Route
+app.post("/api/analyze-pdf", upload.single("file"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const file = req.file;
+    const { affiliation, studentName, birthDate } = req.body;
+
+    if (!studentName || !affiliation || !birthDate) {
+      res.status(400).json({ error: "소속, 학생 이름, 생년월일은 필수 입력 항목입니다." });
+      return;
+    }
+
+    if (!file && !req.body.sampleMode) {
+      res.status(400).json({ error: "분석할 PDF 결과지 파일을 업로드해 주세요." });
+      return;
+    }
+
+    const ai = getGeminiClient();
+
+    let pdfBase64: string;
+    let mimeType = "application/pdf";
+
+    if (file) {
+      pdfBase64 = file.buffer.toString("base64");
+      mimeType = file.mimetype;
+    } else {
+      // Fallback or demo string if sampleMode is toggled
+      res.status(400).json({ error: "유효한 PDF 파일이 수신되지 않았습니다." });
+      return;
+    }
+
+    const promptText = `
+너는 학교 현장 교사들을 지원하는 전문 학교심리 및 상담 전문가 AI 분석기야.
+첨부된 학생 심리검사 결과지(PDF)를 정밀 분석하여, 아래 학생 정보를 바탕으로 교사가 학생을 깊이 이해하고 맞춤형 생활지도 및 학습상담을 진행할 수 있도록 구조화된 종합 보고서를 작성해 줘.
+
+[학생 정보]
+- 소속 (학년/반): ${affiliation}
+- 학생 이름: ${studentName}
+- 생년월일: ${birthDate}
+
+[분석 지침]
+1. PDF 결과지에 나와있는 주요 검사 척도, 점수, 수준, 심리 상태를 정확하게 파악할 것.
+2. 학생의 학년/연령 및 소속 정보를 반영하여 교사가 실무에서 바로 활용할 수 있는 실질적인 지침을 제공할 것.
+3. 한국어로 전문적이면서도 따뜻하고 명확하게 작성할 것.
+4. 반드시 주어진 JSON 구조에 맞춰 응답할 것.
+`;
+
+    const imageOrPdfPart = {
+      inlineData: {
+        mimeType: mimeType,
+        data: pdfBase64,
+      },
+    };
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: {
+        parts: [imageOrPdfPart, { text: promptText }],
+      },
+      config: {
+        temperature: 0.2,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            testMeta: {
+              type: Type.OBJECT,
+              properties: {
+                testTitle: { type: Type.STRING, description: "검사 명칭 (예: K-MIGI 종합심리검사, 학습정서 종합검사 등)" },
+                testDate: { type: Type.STRING, description: "검사 실시일자 또는 추출된 날짜" },
+                overallSummary: { type: Type.STRING, description: "검사 결과 2~3문장 요약" },
+              },
+              required: ["testTitle", "overallSummary"],
+            },
+            scores: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  category: { type: Type.STRING, description: "검사 요인/영역명 (예: 자아개념, 학습동기, 정서안정성)" },
+                  score: { type: Type.NUMBER, description: "원점수 또는 T점수/백분위" },
+                  maxScore: { type: Type.NUMBER, description: "만점 기준 (기본값 100)" },
+                  level: { type: Type.STRING, description: "수준 (예: 매우 높음, 양호, 관심 필요, 주의)" },
+                  description: { type: Type.STRING, description: "해당 영의 해석 설명" },
+                },
+                required: ["category", "score", "level", "description"],
+              },
+              description: "검사 결과의 주요 점수 영역들",
+            },
+            profile: {
+              type: Type.OBJECT,
+              properties: {
+                cognitiveTrait: { type: Type.STRING, description: "1. 인지 및 학습적 특성 분석" },
+                emotionalTrait: { type: Type.STRING, description: "2. 정서 및 심리적 특성 분석" },
+                socialTrait: { type: Type.STRING, description: "3. 대인관계 및 사회성 특성 분석" },
+                overallProfile: { type: Type.STRING, description: "4. 종합 검사 프로파일 요약" },
+              },
+              required: ["cognitiveTrait", "emotionalTrait", "socialTrait", "overallProfile"],
+            },
+            strengthsWeaknesses: {
+              type: Type.OBJECT,
+              properties: {
+                strengths: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: "학생의 대표적인 강점 (3~5가지)",
+                },
+                weaknesses: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: "학생의 취약점 및 보완이 필요한 유의점 (3~5가지)",
+                },
+              },
+              required: ["strengths", "weaknesses"],
+            },
+            recommendations: {
+              type: Type.OBJECT,
+              properties: {
+                learningMethods: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: "성향에 맞는 구체적 학습방법 추천 (3~4가지)",
+                },
+                selfManagement: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: "자기관리 및 규칙적 생활 습관 코칭 추천 (3~4가지)",
+                },
+                teacherAdvice: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: "담임/교사를 위한 개별 지도 및 상담 가이드라인 (3~4가지)",
+                },
+              },
+              required: ["learningMethods", "selfManagement", "teacherAdvice"],
+            },
+          },
+          required: ["testMeta", "scores", "profile", "strengthsWeaknesses", "recommendations"],
+        },
+      },
+    });
+
+    const resultText = response.text;
+    if (!resultText) {
+      res.status(500).json({ error: "Gemini AI로부터 분석 결과를 수신하지 못했습니다." });
+      return;
+    }
+
+    const parsedResult = JSON.parse(resultText);
+
+    res.json({
+      success: true,
+      studentInfo: {
+        affiliation,
+        studentName,
+        birthDate,
+      },
+      analysis: parsedResult,
+    });
+  } catch (error: any) {
+    console.error("Gemini PDF Analysis Error:", error);
+    res.status(500).json({
+      error: error?.message || "PDF 분석 중 오류가 발생했습니다. 파일 형태를 확인해 주세요.",
+    });
+  }
+});
+
+// Proxy to GAS Endpoint (optional helper to bypass browser CORS constraints if needed)
+app.post("/api/proxy-gas", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { gasUrl, payload } = req.body;
+    if (!gasUrl || !payload) {
+      res.status(400).json({ error: "GAS Web App URL과 전송할 데이터가 필요합니다." });
+      return;
+    }
+
+    const gasRes = await fetch(gasUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const text = await gasRes.text();
+    res.json({ success: true, responseText: text });
+  } catch (err: any) {
+    console.error("GAS Proxy error:", err);
+    res.status(500).json({ error: "구글 시트 연동 전송 중 오류가 발생했습니다: " + err.message });
+  }
+});
+
+// Vite / Static setup
+async function startServer() {
+  if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req: Request, res: Response) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server is running on http://0.0.0.0:${PORT}`);
+  });
+}
+
+startServer();

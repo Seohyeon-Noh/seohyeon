@@ -1,0 +1,6 @@
+{
+  "name": "심리검사 결과 분석기",
+  "description": "교사가 학생의 심리검사 PDF 결과지를 업로드하여 AI 분석 프로파일과 맞춤형 피드백을 확인하고 구글 시트에 저장하는 스마트 분석 앱",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
