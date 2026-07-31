@@ -19,8 +19,8 @@ export default function App() {
     birthDate: "2015-04-12",
   });
 
-  // Selected PDF File
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Selected PDF/Image Files (up to 7)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   // Active or Current Record being viewed/analyzed
   const [currentRecord, setCurrentRecord] = useState<AnalysisRecord | null>(SAMPLE_RECORDS[0]);
@@ -83,12 +83,12 @@ export default function App() {
     const sample = SAMPLE_RECORDS[0];
     setStudentInput(sample.studentInfo);
     setCurrentRecord(sample);
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setError(null);
     setToastMessage("샘플 학생(김민준)의 심리검사 프로파일 데이터를 불러왔습니다.");
   };
 
-  // Handler: Analyze PDF File via Express Backend API (/api/analyze-pdf)
+  // Handler: Analyze PDF/Image Files via Express Backend API (/api/analyze-pdf)
   const handleAnalyzePDF = async () => {
     setIsLoading(true);
     setError(null);
@@ -99,10 +99,12 @@ export default function App() {
       formData.append("studentName", studentInput.studentName.trim());
       formData.append("birthDate", studentInput.birthDate);
 
-      if (selectedFile) {
-        formData.append("file", selectedFile);
+      if (selectedFiles.length > 0) {
+        selectedFiles.forEach((file) => {
+          formData.append("files", file);
+        });
       } else {
-        throw new Error("분석할 심리검사 PDF 파일을 선택해 주세요.");
+        throw new Error("분석할 심리검사 결과지 파일을 최소 1개 이상 선택해 주세요.");
       }
 
       const response = await fetch("/api/analyze-pdf", {
@@ -113,7 +115,7 @@ export default function App() {
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "PDF 분석 중 오류가 발생했습니다. 파일 형식을 확인해 주세요.");
+        throw new Error(data.error || "검사지 분석 중 오류가 발생했습니다. 파일 형식을 확인해 주세요.");
       }
 
       const newRecord: AnalysisRecord = {
@@ -130,10 +132,10 @@ export default function App() {
 
       setRecords((prev) => [newRecord, ...prev]);
       setCurrentRecord(newRecord);
-      setToastMessage(`${studentInput.studentName} 학생의 심리검사 분석이 완료되었습니다!`);
+      setToastMessage(`${studentInput.studentName} 학생의 (${selectedFiles.length}개 검사지) 통합 분석이 완료되었습니다!`);
     } catch (err: any) {
       console.error("Analysis Error:", err);
-      setError(err?.message || "PDF 처리 실패: 파일이 손상되었거나 지원되지 않는 PDF 형식입니다.");
+      setError(err?.message || "파일 처리 실패: 파일이 손상되었거나 지원되지 않는 문서 형식입니다.");
     } finally {
       setIsLoading(false);
     }
@@ -241,8 +243,8 @@ export default function App() {
             <StudentForm
               studentInput={studentInput}
               setStudentInput={setStudentInput}
-              selectedFile={selectedFile}
-              setSelectedFile={setSelectedFile}
+              selectedFiles={selectedFiles}
+              setSelectedFiles={setSelectedFiles}
               onAnalyze={handleAnalyzePDF}
               isLoading={isLoading}
               onLoadSample={handleLoadSample}

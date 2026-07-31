@@ -10,15 +10,16 @@ const app = express();
 const PORT = 3000;
 
 // Configure body parsing
-app.use(express.json({ limit: "25mb" }));
-app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
-// Configure Multer for file upload in memory
+// Configure Multer for file upload in memory (up to 7 files)
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: {
-    fileSize: 20 * 1024 * 1024, // 20MB limit
+    fileSize: 25 * 1024 * 1024, // 25MB per file limit
+    files: 7, // Up to 7 files
   },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === "application/pdf" || file.mimetype.startsWith("image/")) {
@@ -50,10 +51,11 @@ app.get("/api/health", (req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Gemini PDF Analysis API Route
-app.post("/api/analyze-pdf", upload.single("file"), async (req: Request, res: Response): Promise<void> => {
+// Gemini PDF Analysis API Route (Supports up to 7 files)
+app.post("/api/analyze-pdf", upload.array("files", 7), async (req: Request, res: Response): Promise<void> => {
   try {
-    const file = req.file;
+    const rawFiles = req.files as Express.Multer.File[] | undefined;
+    const uploadedFiles = rawFiles && rawFiles.length > 0 ? rawFiles : (req.file ? [req.file] : []);
     const { affiliation, studentName, birthDate } = req.body;
 
     if (!studentName || !affiliation || !birthDate) {
@@ -61,53 +63,45 @@ app.post("/api/analyze-pdf", upload.single("file"), async (req: Request, res: Re
       return;
     }
 
-    if (!file && !req.body.sampleMode) {
-      res.status(400).json({ error: "분석할 PDF 결과지 파일을 업로드해 주세요." });
+    if (uploadedFiles.length === 0 && !req.body.sampleMode) {
+      res.status(400).json({ error: "분석할 PDF 또는 심리검사지 파일을 최소 1개 이상 업로드해 주세요." });
       return;
     }
 
     const ai = getGeminiClient();
 
-    let pdfBase64: string;
-    let mimeType = "application/pdf";
+    const fileParts = uploadedFiles.map((f) => ({
+      inlineData: {
+        mimeType: f.mimetype,
+        data: f.buffer.toString("base64"),
+      },
+    }));
 
-    if (file) {
-      pdfBase64 = file.buffer.toString("base64");
-      mimeType = file.mimetype;
-    } else {
-      // Fallback or demo string if sampleMode is toggled
-      res.status(400).json({ error: "유효한 PDF 파일이 수신되지 않았습니다." });
-      return;
-    }
+    const fileListText = uploadedFiles.map((f, i) => `${i + 1}. ${f.originalname} (${(f.size / (1024 * 1024)).toFixed(2)} MB)`).join("\n");
 
     const promptText = `
 너는 학교 현장 교사들을 지원하는 전문 학교심리 및 상담 전문가 AI 분석기야.
-첨부된 학생 심리검사 결과지(PDF)를 정밀 분석하여, 아래 학생 정보를 바탕으로 교사가 학생을 깊이 이해하고 맞춤형 생활지도 및 학습상담을 진행할 수 있도록 구조화된 종합 보고서를 작성해 줘.
+첨부된 총 ${uploadedFiles.length}개의 학생 심리검사 결과지(PDF/이미지 등)를 종합적으로 정밀 분석하여, 아래 학생 정보를 바탕으로 교사가 학생을 깊이 이해하고 맞춤형 생활지도 및 학습상담을 진행할 수 있도록 통합 구조화된 종합 보고서를 작성해 줘.
 
 [학생 정보]
 - 소속 (학년/반): ${affiliation}
 - 학생 이름: ${studentName}
 - 생년월일: ${birthDate}
+- 업로드된 검사지 목록 (${uploadedFiles.length}개):
+${fileListText}
 
 [분석 및 작성 지침]
-1. PDF 결과지에 나와있는 주요 검사 척도, 점수, 수준, 심리 상태를 정확하게 파악할 것.
+1. 업로드된 모든 검사지(예: PAI-A, RCMAS-2, IESS-A, MBTI 등 여러 결과지)에 나와있는 주요 검사 척도, 점수, 수준, 심리 상태를 다각도로 연관지어 교차 검증 및 종합 파악할 것.
 2. [프로파일 분석 지침]: 학생 본인과 학부모도 쉽게 이해할 수 있도록 '일상생활에서의 실제 예시'(예: 숙제/시험을 치를 때, 친구와 놀거나 대화할 때, 집이나 학교 생활에서의 모습 등)를 구체적으로 포함하여 친근하고 생생하게 설명할 것.
 3. [맞춤형 추천 지침]: '맞춤형 학습 방법', '자기관리 & 습관 지도', '교사 상담 가이드'의 각 항목 문장 처음에 반드시 핵심 개념을 담은 #해시태그 (예: #소규모_분할학습, #시각자료_활용, #10분_정돈루틴, #3초_숨고르기, #개별조용한_피드백 등)를 포함하고 핵심 키워드를 강조할 것.
 4. 한국어로 전문적이면서도 따뜻하고 명확하게 작성할 것.
 5. 반드시 주어진 JSON 구조에 맞춰 응답할 것.
 `;
 
-    const imageOrPdfPart = {
-      inlineData: {
-        mimeType: mimeType,
-        data: pdfBase64,
-      },
-    };
-
     const response = await ai.models.generateContent({
       model: "gemini-3.6-flash",
       contents: {
-        parts: [imageOrPdfPart, { text: promptText }],
+        parts: [...fileParts, { text: promptText }],
       },
       config: {
         temperature: 0.2,
