@@ -38,8 +38,8 @@ export const StudentForm: React.FC<StudentFormProps> = ({
     const newFilesArray = Array.from(fileList);
     const validFiles: File[] = [];
 
-    if (selectedFiles.length + newFilesArray.length > 7) {
-      setError(`최대 7개까지 파일 등록이 가능합니다. (현재 ${selectedFiles.length}개 등록됨)`);
+    if (selectedFiles.length + newFilesArray.length > 5) {
+      setError(`안정적인 분석을 위해 최대 5개까지 파일 등록이 가능합니다. (현재 ${selectedFiles.length}개 등록됨)`);
       return;
     }
 
@@ -50,12 +50,12 @@ export const StudentForm: React.FC<StudentFormProps> = ({
         setError(`'${file.name}'은(는) 지원되지 않는 형식입니다. PDF 또는 이미지 파일만 업로드할 수 있습니다.`);
         return;
       }
-      if (file.size > 10 * 1024 * 1024) {
-        setError(`'${file.name}' 단일 파일 용량이 10MB를 초과합니다. 10MB 이하의 파일을 선택해 주세요.`);
+      if (file.size > 3 * 1024 * 1024) {
+        setError(`'${file.name}' 단일 파일 용량이 3MB를 초과합니다. 3MB 이하의 파일을 선택하거나 이미지로 캡처하여 선택해 주세요.`);
         return;
       }
-      if (currentTotalBytes + file.size > 15 * 1024 * 1024) {
-        setError(`전체 업로드 파일 용량 합계가 15MB를 초과할 수 없습니다. (현재 선택 용량: ${(currentTotalBytes / (1024 * 1024)).toFixed(1)}MB). 대표 결과지 위주로 선택해 주세요.`);
+      if (currentTotalBytes + file.size > 5 * 1024 * 1024) {
+        setError(`안정적인 네트워크 전송을 위해 전체 파일 용량 합계가 5MB를 초과할 수 없습니다. (현재 선택 용량: ${(currentTotalBytes / (1024 * 1024)).toFixed(1)}MB). 핵심 결과지 위주로 선택해 주세요.`);
         return;
       }
       currentTotalBytes += file.size;
@@ -224,10 +224,10 @@ export const StudentForm: React.FC<StudentFormProps> = ({
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              <span>심리검사 결과지 등록 (최대 7개) <span className="text-rose-500">*</span></span>
+              <span>심리검사 결과지 등록 (최대 5개) <span className="text-rose-500">*</span></span>
             </label>
             <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
-              {selectedFiles.length} / 7개 등록됨 (총 {totalSizeMB} MB)
+              {selectedFiles.length} / 5개 등록됨 (총 {totalSizeMB} MB)
             </span>
           </div>
 
@@ -241,7 +241,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
           />
 
           {/* Drag & Drop Dropzone */}
-          {selectedFiles.length < 7 && (
+          {selectedFiles.length < 5 && (
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -261,16 +261,16 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                     <Upload className="w-6 h-6" />
                   </div>
                   <p className="text-sm font-semibold text-slate-800">
-                    심리검사 PDF 결과지 파일들을 이곳에 드래그하거나 클릭하여 선택하세요
+                    심리검사 PDF/이미지 결과지 파일들을 이곳에 드래그하거나 클릭하여 선택하세요
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    PAI-A, RCMAS-2, IESS-A 등 표준 심리검사 PDF 및 이미지 지원 (최대 7개, 전체 합계 15MB 제한)
+                    PAI-A, RCMAS-2, IESS-A 등 표준 심리검사 PDF 및 이미지 지원 (최대 5개, 총 5MB 제한, 이미지 자동 최적화)
                   </p>
                 </>
               ) : (
                 <div className="flex items-center justify-center space-x-2 text-indigo-700 font-bold text-xs">
                   <Plus className="w-4 h-4" />
-                  <span>검사지 파일 추가 등록하기 ({7 - selectedFiles.length}개 더 추가 가능)</span>
+                  <span>검사지 파일 추가 등록하기 ({5 - selectedFiles.length}개 더 추가 가능)</span>
                 </div>
               )}
             </div>

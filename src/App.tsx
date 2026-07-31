@@ -7,6 +7,7 @@ import { GasConfigModal } from "./components/GasConfigModal";
 import { StudentInput, AnalysisRecord, AnalysisResult } from "./types";
 import { SAMPLE_RECORDS } from "./data/sampleData";
 import { Brain, FileText, CheckCircle2, AlertCircle, Sparkles, Sheet } from "lucide-react";
+import { optimizeFileForAnalysis } from "./utils/fileOptimizer";
 
 export default function App() {
   // Navigation tab
@@ -98,32 +99,20 @@ export default function App() {
         throw new Error("분석할 심리검사 결과지 파일을 최소 1개 이상 선택해 주세요.");
       }
 
+      if (selectedFiles.length > 5) {
+        throw new Error("파일은 최대 5개까지 선택할 수 있습니다.");
+      }
+
       const totalBytes = selectedFiles.reduce((sum, f) => sum + f.size, 0);
-      if (totalBytes > 15 * 1024 * 1024) {
+      if (totalBytes > 8 * 1024 * 1024) {
         throw new Error(
-          `선택하신 전체 파일 용량(${(totalBytes / (1024 * 1024)).toFixed(1)}MB)이 제한(15MB)을 초과합니다. 15MB 이하로 첨부해 주세요.`
+          `선택하신 전체 파일 용량(${(totalBytes / (1024 * 1024)).toFixed(1)}MB)이 제한(8MB)을 초과합니다. 파일 크기를 줄여 첨부해 주세요.`
         );
       }
 
-      // Convert files to Base64 in parallel
+      // Convert and optimize files (downscaling images if needed)
       const convertedFiles = await Promise.all(
-        selectedFiles.map((file) => {
-          return new Promise<{ name: string; mimeType: string; data: string }>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const res = reader.result as string;
-              // Extract pure base64 payload
-              const base64Data = res.includes(",") ? res.split(",")[1] : res;
-              resolve({
-                name: file.name,
-                mimeType: file.type || "application/pdf",
-                data: base64Data,
-              });
-            };
-            reader.onerror = () => reject(new Error(`'${file.name}' 파일을 읽는 데 실패했습니다.`));
-            reader.readAsDataURL(file);
-          });
-        })
+        selectedFiles.map((file) => optimizeFileForAnalysis(file))
       );
 
       const response = await fetch("/api/analyze-pdf", {
@@ -141,7 +130,7 @@ export default function App() {
 
       if (response.status === 404) {
         throw new Error(
-          "서버 연결 오류(404): 전송 데이터 크기가 인프라 제한을 초과했거나 네트워크 연결이 끊어졌습니다. 첨부파일의 개수를 줄이거나 더 적은 용량의 파일로 다시 시도해 주세요."
+          "서버 연결 오류(404): 전송 데이터 크기가 클라우드 인프라 한계를 초과하였습니다. 파일 개수를 줄이거나 더 명확히 크롭된 이미지를 선택해 주세요."
         );
       }
 
