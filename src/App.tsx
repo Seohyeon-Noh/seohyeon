@@ -7,7 +7,7 @@ import { GasConfigModal } from "./components/GasConfigModal";
 import { StudentInput, AnalysisRecord, AnalysisResult } from "./types";
 import { SAMPLE_RECORDS } from "./data/sampleData";
 import { Brain, FileText, CheckCircle2, AlertCircle, Sparkles, Sheet } from "lucide-react";
-import { optimizeFileForAnalysis } from "./utils/fileOptimizer";
+import { optimizeFilesForAnalysis } from "./utils/fileOptimizer";
 
 export default function App() {
   // Navigation tab
@@ -110,10 +110,8 @@ export default function App() {
         );
       }
 
-      // Convert and optimize files (downscaling images if needed)
-      const convertedFiles = await Promise.all(
-        selectedFiles.map((file) => optimizeFileForAnalysis(file))
-      );
+      // Convert and optimize PDF & Image files into lightweight JPEG page snapshots
+      const convertedFiles = await optimizeFilesForAnalysis(selectedFiles);
 
       const response = await fetch("/api/analyze-pdf", {
         method: "POST",
