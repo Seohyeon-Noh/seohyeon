@@ -43,15 +43,22 @@ export const StudentForm: React.FC<StudentFormProps> = ({
       return;
     }
 
+    let currentTotalBytes = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+
     for (const file of newFilesArray) {
       if (file.type !== "application/pdf" && !file.type.startsWith("image/")) {
         setError(`'${file.name}'은(는) 지원되지 않는 형식입니다. PDF 또는 이미지 파일만 업로드할 수 있습니다.`);
         return;
       }
-      if (file.size > 25 * 1024 * 1024) {
-        setError(`'${file.name}' 파일 용량이 25MB를 초과하여 제외되었습니다.`);
+      if (file.size > 10 * 1024 * 1024) {
+        setError(`'${file.name}' 단일 파일 용량이 10MB를 초과합니다. 10MB 이하의 파일을 선택해 주세요.`);
         return;
       }
+      if (currentTotalBytes + file.size > 15 * 1024 * 1024) {
+        setError(`전체 업로드 파일 용량 합계가 15MB를 초과할 수 없습니다. (현재 선택 용량: ${(currentTotalBytes / (1024 * 1024)).toFixed(1)}MB). 대표 결과지 위주로 선택해 주세요.`);
+        return;
+      }
+      currentTotalBytes += file.size;
       validFiles.push(file);
     }
 
@@ -257,7 +264,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                     심리검사 PDF 결과지 파일들을 이곳에 드래그하거나 클릭하여 선택하세요
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    PAI-A, RCMAS-2, IESS-A 등 모든 표준 심리검사 PDF 및 이미지 지원 (파일당 최대 25MB, 최대 7개 등록 가능)
+                    PAI-A, RCMAS-2, IESS-A 등 표준 심리검사 PDF 및 이미지 지원 (최대 7개, 전체 합계 15MB 제한)
                   </p>
                 </>
               ) : (

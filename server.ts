@@ -1,6 +1,5 @@
 import express, { Request, Response, NextFunction } from "express";
 import path from "path";
-import multer from "multer";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
@@ -9,49 +8,9 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-// Configure body parsing
-app.use(express.json({ limit: "100mb" }));
-app.use(express.urlencoded({ extended: true, limit: "100mb" }));
-
-// Configure Multer for file upload in memory (up to 7 files)
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 25 * 1024 * 1024, // 25MB per file limit
-    files: 7, // Up to 7 files
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === "application/pdf" || file.mimetype.startsWith("image/")) {
-      cb(null, true);
-    } else {
-      cb(new Error("PDF 또는 이미지 파일만 업로드 가능합니다."));
-    }
-  },
-});
-
-// Multer error handling wrapper middleware
-const handleFileUpload = (req: Request, res: Response, next: NextFunction) => {
-  upload.array("files", 7)(req, res, (err: any) => {
-    if (err) {
-      if (err instanceof multer.MulterError) {
-        if (err.code === "LIMIT_FILE_SIZE") {
-          res.status(400).json({ error: "개별 파일 용량이 제한(25MB)을 초과했습니다." });
-          return;
-        }
-        if (err.code === "LIMIT_FILE_COUNT") {
-          res.status(400).json({ error: "파일은 최대 7개까지만 첨부할 수 있습니다." });
-          return;
-        }
-        res.status(400).json({ error: `파일 업로드 오류: ${err.message}` });
-        return;
-      }
-      res.status(400).json({ error: err.message || "파일 업로드 중 오류가 발생했습니다." });
-      return;
-    }
-    next();
-  });
-};
+// Configure body parsing for JSON payloads up to 30mb
+app.use(express.json({ limit: "30mb" }));
+app.use(express.urlencoded({ extended: true, limit: "30mb" }));
 
 // Lazy Gemini AI initialization helper
 function getGeminiClient() {
@@ -74,17 +33,24 @@ app.get("/api/health", (req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Gemini PDF Analysis API Route (Supports up to 7 files)
-app.post("/api/analyze-pdf", handleFileUpload, async (req: Request, res: Response): Promise<void> => {
+// Interface for JSON incoming file objects
+interface IncomingFile {
+  name: string;
+  mimeType: string;
+  data: string; // Base64 string
+}
+
+// Gemini PDF Analysis API Route (Supports JSON payload with up to 7 base64 files)
+app.post("/api/analyze-pdf", async (req: Request, res: Response): Promise<void> => {
   try {
-    const rawFiles = req.files as Express.Multer.File[] | undefined;
-    const uploadedFiles = rawFiles && rawFiles.length > 0 ? rawFiles : (req.file ? [req.file] : []);
-    const { affiliation, studentName, birthDate } = req.body;
+    const { affiliation, studentName, birthDate, files } = req.body;
 
     if (!studentName || !affiliation || !birthDate) {
       res.status(400).json({ error: "소속, 학생 이름, 생년월일은 필수 입력 항목입니다." });
       return;
     }
+
+    const uploadedFiles: IncomingFile[] = Array.isArray(files) ? files : [];
 
     if (uploadedFiles.length === 0 && !req.body.sampleMode) {
       res.status(400).json({ error: "분석할 PDF 또는 심리검사지 파일을 최소 1개 이상 업로드해 주세요." });
@@ -95,12 +61,12 @@ app.post("/api/analyze-pdf", handleFileUpload, async (req: Request, res: Respons
 
     const fileParts = uploadedFiles.map((f) => ({
       inlineData: {
-        mimeType: f.mimetype,
-        data: f.buffer.toString("base64"),
+        mimeType: f.mimeType || "application/pdf",
+        data: f.data,
       },
     }));
 
-    const fileListText = uploadedFiles.map((f, i) => `${i + 1}. ${f.originalname} (${(f.size / (1024 * 1024)).toFixed(2)} MB)`).join("\n");
+    const fileListText = uploadedFiles.map((f, i) => `${i + 1}. ${f.name}`).join("\n");
 
     const promptText = `
 너는 학교 현장 교사들을 지원하는 전문 학교심리 및 상담 전문가 AI 분석기야.

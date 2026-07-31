@@ -94,23 +94,56 @@ export default function App() {
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append("affiliation", studentInput.affiliation.trim());
-      formData.append("studentName", studentInput.studentName.trim());
-      formData.append("birthDate", studentInput.birthDate);
-
-      if (selectedFiles.length > 0) {
-        selectedFiles.forEach((file) => {
-          formData.append("files", file);
-        });
-      } else {
+      if (selectedFiles.length === 0) {
         throw new Error("분석할 심리검사 결과지 파일을 최소 1개 이상 선택해 주세요.");
       }
 
+      const totalBytes = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+      if (totalBytes > 15 * 1024 * 1024) {
+        throw new Error(
+          `선택하신 전체 파일 용량(${(totalBytes / (1024 * 1024)).toFixed(1)}MB)이 제한(15MB)을 초과합니다. 15MB 이하로 첨부해 주세요.`
+        );
+      }
+
+      // Convert files to Base64 in parallel
+      const convertedFiles = await Promise.all(
+        selectedFiles.map((file) => {
+          return new Promise<{ name: string; mimeType: string; data: string }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const res = reader.result as string;
+              // Extract pure base64 payload
+              const base64Data = res.includes(",") ? res.split(",")[1] : res;
+              resolve({
+                name: file.name,
+                mimeType: file.type || "application/pdf",
+                data: base64Data,
+              });
+            };
+            reader.onerror = () => reject(new Error(`'${file.name}' 파일을 읽는 데 실패했습니다.`));
+            reader.readAsDataURL(file);
+          });
+        })
+      );
+
       const response = await fetch("/api/analyze-pdf", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          affiliation: studentInput.affiliation.trim(),
+          studentName: studentInput.studentName.trim(),
+          birthDate: studentInput.birthDate,
+          files: convertedFiles,
+        }),
       });
+
+      if (response.status === 404) {
+        throw new Error(
+          "서버 연결 오류(404): 전송 데이터 크기가 인프라 제한을 초과했거나 네트워크 연결이 끊어졌습니다. 첨부파일의 개수를 줄이거나 더 적은 용량의 파일로 다시 시도해 주세요."
+        );
+      }
 
       const responseText = await response.text();
       let data: any;
