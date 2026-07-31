@@ -1,4 +1,4 @@
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 import path from "path";
 import multer from "multer";
 import { GoogleGenAI, Type } from "@google/genai";
@@ -30,6 +30,29 @@ const upload = multer({
   },
 });
 
+// Multer error handling wrapper middleware
+const handleFileUpload = (req: Request, res: Response, next: NextFunction) => {
+  upload.array("files", 7)(req, res, (err: any) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          res.status(400).json({ error: "개별 파일 용량이 제한(25MB)을 초과했습니다." });
+          return;
+        }
+        if (err.code === "LIMIT_FILE_COUNT") {
+          res.status(400).json({ error: "파일은 최대 7개까지만 첨부할 수 있습니다." });
+          return;
+        }
+        res.status(400).json({ error: `파일 업로드 오류: ${err.message}` });
+        return;
+      }
+      res.status(400).json({ error: err.message || "파일 업로드 중 오류가 발생했습니다." });
+      return;
+    }
+    next();
+  });
+};
+
 // Lazy Gemini AI initialization helper
 function getGeminiClient() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -52,7 +75,7 @@ app.get("/api/health", (req: Request, res: Response) => {
 });
 
 // Gemini PDF Analysis API Route (Supports up to 7 files)
-app.post("/api/analyze-pdf", upload.array("files", 7), async (req: Request, res: Response): Promise<void> => {
+app.post("/api/analyze-pdf", handleFileUpload, async (req: Request, res: Response): Promise<void> => {
   try {
     const rawFiles = req.files as Express.Multer.File[] | undefined;
     const uploadedFiles = rawFiles && rawFiles.length > 0 ? rawFiles : (req.file ? [req.file] : []);
@@ -192,7 +215,29 @@ ${fileListText}
       return;
     }
 
-    const parsedResult = JSON.parse(resultText);
+    let parsedResult: any;
+    try {
+      let cleanedText = resultText.trim();
+      // Remove markdown code fences if present
+      if (cleanedText.startsWith("```")) {
+        cleanedText = cleanedText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+      }
+      
+      // Locate first '{' and last '}'
+      const firstBrace = cleanedText.indexOf("{");
+      const lastBrace = cleanedText.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleanedText = cleanedText.substring(firstBrace, lastBrace + 1);
+      }
+
+      parsedResult = JSON.parse(cleanedText);
+    } catch (parseErr) {
+      console.error("JSON Parsing failed for Gemini output. Raw text:", resultText);
+      res.status(500).json({
+        error: "AI가 생성한 분석 결과의 데이터 포맷을 읽는 중 오류가 발생했습니다. 다시 시도해 주세요.",
+      });
+      return;
+    }
 
     res.json({
       success: true,
@@ -234,6 +279,14 @@ app.post("/api/proxy-gas", async (req: Request, res: Response): Promise<void> =>
     console.error("GAS Proxy error:", err);
     res.status(500).json({ error: "구글 시트 연동 전송 중 오류가 발생했습니다: " + err.message });
   }
+});
+
+// Global Error Handler
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error("Express Error Handler:", err);
+  res.status(err.status || 500).json({
+    error: err.message || "서버에서 요청을 처리하는 중 오류가 발생했습니다.",
+  });
 });
 
 // Vite / Static setup

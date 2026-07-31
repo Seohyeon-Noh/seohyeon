@@ -112,7 +112,18 @@ export default function App() {
         body: formData,
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch (jsonErr) {
+        const cleanMessage = responseText.replace(/<[^>]*>?/gm, "").trim().substring(0, 120);
+        throw new Error(
+          response.ok
+            ? "서버 응답 데이터 형식을 읽지 못했습니다."
+            : `서버 응답 오류 (${response.status}): ${cleanMessage || "알 수 없는 오류가 발생했습니다."}`
+        );
+      }
 
       if (!response.ok || !data.success) {
         throw new Error(data.error || "검사지 분석 중 오류가 발생했습니다. 파일 형식을 확인해 주세요.");
